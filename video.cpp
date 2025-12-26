@@ -11,6 +11,7 @@
 #include <atomic>
 extern std::atomic<double> audio_clock;
 extern std::atomic<bool> keep_running;
+extern std::atomic<bool> has_audio;
 
 using namespace cv;
 void video_func(std::string filename)
@@ -57,13 +58,14 @@ void video_func(std::string filename)
         std::string buffer;
 
         double video_pts=cap.get(CAP_PROP_POS_MSEC)/1000.0;
-
+        if(has_audio.load()){
         while(keep_running&& video_pts>audio_clock.load()){
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
         if(!keep_running)break;
         if (video_pts < audio_clock.load() - 0.1) {
             continue;
+        }
         }
         for (int x = 0; x < frame.rows; x++)
         {

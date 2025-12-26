@@ -12,6 +12,7 @@ extern "C" {
 
 std::atomic<double> audio_clock;
 extern std::atomic<bool> keep_running;
+std::atomic<bool> has_audio=false;
 
 void audio_func(std::string filename) {
     // 1. Initialize Pointers to NULL
@@ -34,6 +35,7 @@ void audio_func(std::string filename) {
     int audio_stream_idx = av_find_best_stream(fmt_ctx, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
     if (audio_stream_idx < 0) {
         std::cerr << "ERR: Could not find audio stream in " << filename << std::endl;
+        has_audio.store(false);
         return;
     }
 
@@ -93,9 +95,9 @@ void audio_func(std::string filename) {
     while (keep_running&& av_read_frame(fmt_ctx, packet) >= 0) {
         if (packet->stream_index == audio_stream_idx) {
             if (avcodec_send_packet(codec_ctx, packet) == 0) {
-                while (avcodec_receive_frame(codec_ctx, frame) == 0) {
+                while (keep_running&& avcodec_receive_frame(codec_ctx, frame) == 0) {
                     int samples = swr_convert(swr, &buffer, 44100, (const uint8_t**)frame->data, frame->nb_samples);
-
+                    has_audio.store(true);
                     // Update sync clock
                     audio_clock.store(frame->pts * av_q2d(fmt_ctx->streams[audio_stream_idx]->time_base));
 
