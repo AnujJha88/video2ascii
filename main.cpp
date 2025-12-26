@@ -7,6 +7,10 @@
 #include<sys/ioctl.h>
 #include<unistd.h>
 #include <string>
+#include<chrono>
+#include<thread>
+
+
 using namespace cv;
 
 int main(){
@@ -27,7 +31,16 @@ int main(){
     Mat frame;
     std::cout<<'\033[25l';
     int screen_width,screen_height;
+
+    double fps=cap.get(CAP_PROP_FPS);
+    if(fps<=0)fps=30;
+    double frame_time=1000.0/fps;
+
+
     while(cap.read(frame)){
+
+    auto start=std::chrono::steady_clock::now();
+
    ioctl(STDOUT_FILENO,TIOCGWINSZ,&ws);
     float aspect_ratio=(float)width/(float)height;
     screen_width=ws.ws_col;
@@ -50,12 +63,18 @@ int main(){
                 int intensity=(pixel[2]+pixel[1]+pixel[0])/3;
                 int index=(float)intensity*(density.size()-1)/(float)255;
                buffer+=density[index];
-            }
+                          }
             buffer+='\n';
+            buffer += "\033[0m";
         }
-        int fps=cap.get(CAP_PROP_FPS);
-        std::cout << "\033[H" << buffer << std::flush;
-        waitKey((float)1000/fps*5);
+                std::cout << "\033[H" << buffer << std::flush;
+        auto end=std::chrono::steady_clock::now();
+        double elapsed=std::chrono::duration<double,std::milli>(end-start).count();
+        if(elapsed<frame_time){
+            std::this_thread::sleep_for(std::chrono::milliseconds((int)(frame_time-elapsed)));
+        }
+        waitKey(1);
+
     }
     std::cout<<'\033[25h';
         return 0;
