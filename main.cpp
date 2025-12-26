@@ -39,16 +39,23 @@ int main(){
         std::string buffer;
         for(int x=0;x<frame.rows;x++){
             for(int y=0;y<frame.cols;y++){
-                Vec3b color=frame.at<Vec3b>(x,y);
-                int intensity=(color[2]+color[1]+color[0])/3;
+                Vec3b pixel=frame.at<Vec3b>(x,y);
+                int r_val = pixel[2]; // Red
+                int g_val = pixel[1]; // Green
+                int b_val = pixel[0]; // Blue
+
+                buffer += "\033[38;2;" + std::to_string(r_val) + ";"
+                       + std::to_string(g_val) + ";"
+                       + std::to_string(b_val) + "m";
+                int intensity=(pixel[2]+pixel[1]+pixel[0])/3;
                 int index=(float)intensity*(density.size()-1)/(float)255;
                buffer+=density[index];
             }
             buffer+='\n';
         }
-
+        int fps=cap.get(CAP_PROP_FPS);
         std::cout << "\033[H" << buffer << std::flush;
-        waitKey(30);
+        waitKey((float)1000/fps*5);
     }
     std::cout<<'\033[25h';
         return 0;
