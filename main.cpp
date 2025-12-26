@@ -1,82 +1,23 @@
-#include <asm-generic/ioctls.h>
-#include<opencv2/core.hpp>
-#include<opencv2/videoio.hpp>
-#include<opencv2/imgproc.hpp>
-#include<opencv2/highgui.hpp>
-#include<iostream>
-#include<sys/ioctl.h>
-#include<unistd.h>
-#include <string>
-#include<chrono>
 #include<thread>
+#include<string>
+#include<iostream>
 
+void audio_func(std::string filename);
+void video_func(std::string filename);
 
-using namespace cv;
-
-int main(){
-    std::string filename;
-    std::ios_base::sync_with_stdio(false);//faster cout
-    std::cin>>filename;
-    std::string density=" .:-=+*#%@";
-    VideoCapture cap(filename);
-    int width,height;
-    if(cap.isOpened()){
-   height=cap.get(CAP_PROP_FRAME_HEIGHT);
-   width=cap.get(CAP_PROP_FRAME_WIDTH);
-
-         std::cout<<"width: "<<width<<" height: "<<height<<std::endl;
+int main(int argc, char** argv){
+    if(argc<2){
+        std::cout << "Usage: ./ascii_vid <video_file>" << std::endl;
+        return 1;
     }
-       struct winsize ws;
 
-    Mat frame;
-    std::cout<<'\033[25l';
-    int screen_width,screen_height;
+    std::string filename=argv[1];
 
-    double fps=cap.get(CAP_PROP_FPS);
-    if(fps<=0)fps=30;
-    double frame_time=1000.0/fps;
+    std::thread audio_thread(audio_func, filename);
+    std::thread video_thread(video_func, filename);
 
+    audio_thread.join();
+    video_thread.join();
 
-    while(cap.read(frame)){
-
-    auto start=std::chrono::steady_clock::now();
-
-   ioctl(STDOUT_FILENO,TIOCGWINSZ,&ws);
-    float aspect_ratio=(float)width/(float)height;
-    screen_width=ws.ws_col;
-    screen_height=screen_width/aspect_ratio;
-        screen_height*=0.5;
-      if (screen_height >= ws.ws_row) screen_height = ws.ws_row - 1;
-       // cvtColor(frame,frame,COLOR_BGR2GRAY);
-        resize(frame,frame,Size(screen_width,screen_height),0,0,INTER_AREA);
-        std::string buffer;
-        for(int x=0;x<frame.rows;x++){
-            for(int y=0;y<frame.cols;y++){
-                Vec3b pixel=frame.at<Vec3b>(x,y);
-                int r_val = pixel[2]; // Red
-                int g_val = pixel[1]; // Green
-                int b_val = pixel[0]; // Blue
-
-                buffer += "\033[38;2;" + std::to_string(r_val) + ";"
-                       + std::to_string(g_val) + ";"
-                       + std::to_string(b_val) + "m";
-                int intensity=(pixel[2]+pixel[1]+pixel[0])/3;
-                int index=(float)intensity*(density.size()-1)/(float)255;
-               buffer+=density[index];
-                          }
-            buffer+='\n';
-            buffer += "\033[0m";
-        }
-                std::cout << "\033[H" << buffer << std::flush;
-        auto end=std::chrono::steady_clock::now();
-        double elapsed=std::chrono::duration<double,std::milli>(end-start).count();
-        if(elapsed<frame_time){
-            std::this_thread::sleep_for(std::chrono::milliseconds((int)(frame_time-elapsed)));
-        }
-        waitKey(1);
-
-    }
-    std::cout<<'\033[25h';
-        return 0;
-
+    return 0;
 }
