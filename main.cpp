@@ -1,16 +1,22 @@
 #include<thread>
 #include<string>
 #include<iostream>
+#include<atomic>
+#include<csignal>
 
 void audio_func(std::string filename);
 void video_func(std::string filename);
+std::atomic<bool> keep_running(true);
 
+void signal_handler(int signal) {
+    keep_running = false;
+}
 int main(int argc, char** argv){
     if(argc<2){
         std::cout << "Usage: ./ascii_vid <video_file>" << std::endl;
         return 1;
     }
-
+    std::signal(SIGINT, signal_handler);
     std::string filename=argv[1];
 
     std::thread audio_thread(audio_func, filename);

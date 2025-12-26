@@ -2,7 +2,7 @@ CC=g++
 
 CFLAGS=`pkg-config --cflags opencv4 sdl2 libavcodec libavformat libswresample libavutil`
 
-LIBS=`pkg-config --libs opencv4 sdl2 libavcodec libavformat libswresample libavutil` -pthread
+LIBS=`pkg-config --libs opencv4 sdl2 libavcodec libavformat libswresample libavutil` -pthread -latomic
 
 TARGET=ascii_vid
 

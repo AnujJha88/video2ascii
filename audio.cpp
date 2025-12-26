@@ -1,84 +1,116 @@
-#include <SDL2/SDL_audio.h>
-#include <cstddef>
-#include<iostream>
-#include<SDL2/SDL.h>
-#include<atomic>
+#include <iostream>
+#include <atomic>
+#include <string>
+#include <SDL2/SDL.h>
+
 extern "C" {
     #include <libavcodec/avcodec.h>
     #include <libavformat/avformat.h>
     #include <libswresample/swresample.h>
-    #include <libavutil/avutil.h>        // For av_malloc/av_free
-    #include <libavutil/channel_layout.h> // For channel layouts
-    #include <libavutil/mem.h>           // Specifically for memory
+    #include <libavutil/channel_layout.h>
 }
-std::atomic<double> audio_clock=0.0;
 
-void audio_func(std::string filename){
-    AVFormatContext* fmt_ctx=avformat_alloc_context();
-    avformat_open_input(&fmt_ctx,filename.c_str(),NULL,NULL);
-    avformat_find_stream_info(fmt_ctx,NULL);
+std::atomic<double> audio_clock;
+extern std::atomic<bool> keep_running;
 
-
-    //find best  audio strim
-
-    int audio_stream_idx=av_find_best_stream(fmt_ctx,AVMEDIA_TYPE_AUDIO,-1,-1,NULL,0);
-    AVCodecParameters* codec_param=fmt_ctx->streams[audio_stream_idx]->codecpar;
-
-    const AVCodec* codec=avcodec_find_decoder(codec_param->codec_id);
-
-    AVCodecContext* codec_ctx=avcodec_alloc_context3(codec);
-    avcodec_parameters_from_context(codec_param,codec_ctx);
-    avcodec_open2(codec_ctx,codec,NULL);
-
-    SDL_Init(SDL_INIT_AUDIO);
-    SDL_AudioSpec wanted;
-    wanted.freq=44100;
-    wanted.format=AUDIO_S16SYS;
-    wanted.channels=2;
-    wanted.samples=1024;
-    wanted.callback=NULL;
-    SDL_AudioDeviceID device=SDL_OpenAudioDevice(NULL,0,&wanted,NULL,0);
-    SDL_PauseAudioDevice(device, 0);
-
-
-    /// Now we use the resampler to make sure we have 44.1kHz audio
-
+void audio_func(std::string filename) {
+    // 1. Initialize Pointers to NULL
+    AVFormatContext* fmt_ctx = nullptr;
+    AVCodecContext* codec_ctx = nullptr;
     SwrContext* swr = nullptr;
+
+    // 2. Open File
+    if (avformat_open_input(&fmt_ctx, filename.c_str(), NULL, NULL) < 0) {
+        std::cerr << "ERR: Could not open file: " << filename << std::endl;
+        return;
+    }
+
+    if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
+        std::cerr << "ERR: Could not find stream info" << std::endl;
+        return;
+    }
+
+    // 3. Find Audio Stream
+    int audio_stream_idx = av_find_best_stream(fmt_ctx, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
+    if (audio_stream_idx < 0) {
+        std::cerr << "ERR: Could not find audio stream in " << filename << std::endl;
+        return;
+    }
+
+    // 4. Setup Decoder
+    AVCodecParameters* codec_par = fmt_ctx->streams[audio_stream_idx]->codecpar;
+    const AVCodec* codec = avcodec_find_decoder(codec_par->codec_id);
+    if (!codec) {
+        std::cerr << "ERR: Unsupported codec!" << std::endl;
+        return;
+    }
+
+    codec_ctx = avcodec_alloc_context3(codec);
+    avcodec_parameters_to_context(codec_ctx, codec_par);
+    if (avcodec_open2(codec_ctx, codec, NULL) < 0) {
+        std::cerr << "ERR: Could not open codec" << std::endl;
+        return;
+    }
+
+    // 5. Initialize SDL
+    if (SDL_Init(SDL_INIT_AUDIO) < 0) {
+        std::cerr << "ERR: SDL Init failed: " << SDL_GetError() << std::endl;
+        return;
+    }
+
+    SDL_AudioSpec wanted, actual;
+    SDL_zero(wanted);
+    wanted.freq = 44100;
+    wanted.format = AUDIO_S16SYS;
+    wanted.channels = 2;
+    wanted.samples = 1024;
+
+    SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &wanted, &actual, 0);
+    if (dev == 0) {
+        std::cerr << "ERR: SDL_OpenAudioDevice failed: " << SDL_GetError() << std::endl;
+        return;
+    }
+    SDL_PauseAudioDevice(dev, 0);
+
+    // 6. Setup Resampler (Modern API)
     AVChannelLayout out_ch_layout;
-    av_channel_layout_default(&out_ch_layout, 2); // Set to Stereo
+    av_channel_layout_default(&out_ch_layout, 2);
 
-    // Using swr_alloc_set_opts2 (the modern replacement)
-    swr_alloc_set_opts2(&swr,
-        &out_ch_layout, AV_SAMPLE_FMT_S16, 44100,      // Output
-        &codec_ctx->ch_layout, codec_ctx->sample_fmt, codec_ctx->sample_rate, // Input
-        0, NULL);
+    // Safety check for older FFmpeg versions
+    if (swr_alloc_set_opts2(&swr, &out_ch_layout, AV_SAMPLE_FMT_S16, 44100,
+                            &codec_ctx->ch_layout, codec_ctx->sample_fmt, codec_ctx->sample_rate,
+                            0, NULL) < 0) {
+        std::cerr << "ERR: Could not initialize resampler" << std::endl;
+        return;
+    }
     swr_init(swr);
-    AVPacket* packet=av_packet_alloc();
-    AVFrame* frame=av_frame_alloc();
-    uint8_t* output=(uint8_t*)av_malloc(192000);
 
-    while(av_read_frame(fmt_ctx,packet)>=0){
-        if(packet->stream_index==audio_stream_idx){
-            avcodec_send_packet(codec_ctx,packet);
+    // 7. Loop
+    AVPacket* packet = av_packet_alloc();
+    AVFrame* frame = av_frame_alloc();
+    uint8_t* buffer = (uint8_t*)av_malloc(192000);
 
-            while(avcodec_receive_frame(codec_ctx,frame)==0){
-                int samples=swr_convert(swr,&output,44100,(const uint8_t**)frame->data, frame->nb_samples);
-                int outsize=samples*2*2;//2 channels, 2 bytes
-                audio_clock=frame->pts*av_q2d(fmt_ctx->streams[audio_stream_idx]->time_base);
+    while (keep_running&& av_read_frame(fmt_ctx, packet) >= 0) {
+        if (packet->stream_index == audio_stream_idx) {
+            if (avcodec_send_packet(codec_ctx, packet) == 0) {
+                while (avcodec_receive_frame(codec_ctx, frame) == 0) {
+                    int samples = swr_convert(swr, &buffer, 44100, (const uint8_t**)frame->data, frame->nb_samples);
 
-                SDL_QueueAudio(device,output,outsize);
-                while (SDL_GetQueuedAudioSize(device) > 44100 * 4) {
-                SDL_Delay(10);
-            }
+                    // Update sync clock
+                    audio_clock.store(frame->pts * av_q2d(fmt_ctx->streams[audio_stream_idx]->time_base));
+
+                    SDL_QueueAudio(dev, buffer, samples * 2 * 2);
+                    while (keep_running&&SDL_GetQueuedAudioSize(dev) > 44100 * 4) SDL_Delay(10);
+                }
             }
         }
-
         av_packet_unref(packet);
     }
-av_free(output);
-av_frame_free(&frame);
-av_packet_free(&packet);
-avcodec_free_context(&codec_ctx);
-avformat_close_input(&fmt_ctx);
-SDL_CloseAudioDevice(device);
+
+    // 8. Cleanup
+    av_free(buffer);
+    av_frame_free(&frame);
+    av_packet_free(&packet);
+    avcodec_free_context(&codec_ctx);
+    avformat_close_input(&fmt_ctx);
 }

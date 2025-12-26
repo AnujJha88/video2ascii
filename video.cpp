@@ -10,6 +10,7 @@
 #include <thread>
 #include <atomic>
 extern std::atomic<double> audio_clock;
+extern std::atomic<bool> keep_running;
 
 using namespace cv;
 void video_func(std::string filename)
@@ -39,7 +40,7 @@ void video_func(std::string filename)
     Vec3b last_pixel = Vec3b(0, 0, 0);
     bool first_pixel = true;
 
-    while (cap.read(frame))
+    while (keep_running&&cap.read(frame))
     {
 
         auto start = std::chrono::steady_clock::now();
@@ -57,9 +58,10 @@ void video_func(std::string filename)
 
         double video_pts=cap.get(CAP_PROP_POS_MSEC)/1000.0;
 
-        while(video_pts>audio_clock.load()){
+        while(keep_running&& video_pts>audio_clock.load()){
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
+        if(!keep_running)break;
         if (video_pts < audio_clock.load() - 0.1) {
             continue;
         }
