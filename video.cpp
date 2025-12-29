@@ -41,7 +41,7 @@ void video_func(std::string filename)
     Vec3b last_pixel = Vec3b(0, 0, 0);
     bool first_pixel = true;
 
-    while (keep_running&&cap.read(frame))
+    while (keep_running && cap.read(frame))
     {
 
         auto start = std::chrono::steady_clock::now();
@@ -50,47 +50,59 @@ void video_func(std::string filename)
         float aspect_ratio = (float)width / (float)height;
         screen_width = ws.ws_col;
         screen_height = screen_width / aspect_ratio;
-        screen_height *= 0.5;
-        if (screen_height >= ws.ws_row)
-            screen_height = ws.ws_row - 1;
+
+        if (screen_height >= ws.ws_row * 2)
+            screen_height = (ws.ws_row - 1) * 2;
         // cvtColor(frame,frame,COLOR_BGR2GRAY);
         resize(frame, frame, Size(screen_width, screen_height), 0, 0, INTER_AREA);
         std::string buffer;
 
-        double video_pts=cap.get(CAP_PROP_POS_MSEC)/1000.0;
-        if(has_audio.load()){
-        while(keep_running&& video_pts>audio_clock.load()){
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        buffer.reserve(screen_width * screen_height * 20);
+        double video_pts = cap.get(CAP_PROP_POS_MSEC) / 1000.0;
+        if (has_audio.load())
+        {
+            while (keep_running && video_pts > audio_clock.load())
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            if (!keep_running)
+                break;
+            if (video_pts < audio_clock.load() - 0.1)
+            {
+                continue;
+            }
         }
-        if(!keep_running)break;
-        if (video_pts < audio_clock.load() - 0.1) {
-            continue;
-        }
-        }
-        for (int x = 0; x < frame.rows; x++)
+        for (int x = 0; x < frame.rows - 1; x += 2)
         {
             for (int y = 0; y < frame.cols; y++)
             {
-                Vec3b pixel = frame.at<Vec3b>(x, y);
-                int r_val = pixel[2]; // Red
-                int g_val = pixel[1]; // Green
-                int b_val = pixel[0]; // Blue
-                if (first_pixel || pixel[0] != last_pixel[0] ||
-                    pixel[1] != last_pixel[1] || pixel[2] != last_pixel[2])
-                {
+                // Vec3b pixel = frame.at<Vec3b>(x, y);
+                // int r_val = pixel[2]; // Red
+                // int g_val = pixel[1]; // Green
+                // int b_val = pixel[0]; // Blue
+                // if (first_pixel || pixel[0] != last_pixel[0] ||
+                //     pixel[1] != last_pixel[1] || pixel[2] != last_pixel[2])
+                // {
 
-                    buffer += "\033[38;2;" + std::to_string(r_val) + ";" + std::to_string(g_val) + ";" + std::to_string(b_val) + "m";
+                //     buffer += "\033[38;2;" + std::to_string(r_val) + ";" + std::to_string(g_val) + ";" + std::to_string(b_val) + "m";
 
-                    last_pixel = pixel;
-                    first_pixel = false;
-                }
-                int intensity = (pixel[2] + pixel[1] + pixel[0]) / 3;
-                int index = (float)intensity * (density.size() - 1) / (float)255;
-                buffer += density[index];
+                //     last_pixel = pixel;
+                //     first_pixel = false;
+                // }
+                // int intensity = (pixel[2] + pixel[1] + pixel[0]) / 3;
+                // int index = (float)intensity * (density.size() - 1) / (float)255;
+                // buffer += density[index];
+
+                Vec3b top = frame.at<Vec3b>(x, y);
+                Vec3b bot = frame.at<Vec3b>(x + 1, y);
+
+                // Foreground color (top pixel) + Background color (bottom pixel)
+                buffer += "\033[38;2;" + std::to_string(top[2]) + ";" + std::to_string(top[1]) + ";" + std::to_string(top[0]) + 
+                        ";48;2;" + std::to_string(bot[2]) + ";" + std::to_string(bot[1]) + ";" + std::to_string(bot[0]) + "m▀";
             }
 
             buffer += "\033[0m\n";
-            first_pixel = true;
+            // first_pixel = true;
         }
         std::cout << "\033[H" << buffer << std::flush;
         auto end = std::chrono::steady_clock::now();

@@ -19,13 +19,16 @@ void audio_func(std::string filename) {
     AVFormatContext* fmt_ctx = nullptr;
     AVCodecContext* codec_ctx = nullptr;
     SwrContext* swr = nullptr;
+    AVDictionary* opts=nullptr;
 
+    av_dict_set(&opts,"http_persistent","0",0);
     // 2. Open File
-    if (avformat_open_input(&fmt_ctx, filename.c_str(), NULL, NULL) < 0) {
+    if (avformat_open_input(&fmt_ctx, filename.c_str(), NULL, &opts) < 0) {
         std::cerr << "ERR: Could not open file: " << filename << std::endl;
+        av_dict_free(&opts);
         return;
     }
-
+    av_dict_free(&opts);
     if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
         std::cerr << "ERR: Could not find stream info" << std::endl;
         return;
