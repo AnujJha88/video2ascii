@@ -1,6 +1,12 @@
 # Video2ASCII
 
 This basically converts any video( and even a yt link if you do it right) to an ASCII video.
+
+Has audio support as well so you can watch a video with its sound in your terminal
+
+# Demo
+this is a still image will add a gif later
+
 ![alt text](image.png)
 # Build the project
 
@@ -10,15 +16,15 @@ This basically converts any video( and even a yt link if you do it right) to an 
 git clone git@github.com:AnujJha88/video2ascii.git
 
 # install dependencies
-sudo apt update && sudo apt install -y \ 
-build-essential \ 
-pkg-config \ 
-libopencv-dev \ 
-libsdl2-dev \ 
-libavcodec-dev \ 
-libavformat-dev \ 
-libswresample-dev \ 
-libavutil-dev \ 
+sudo apt update && sudo apt install -y \
+build-essential \
+pkg-config \
+libopencv-dev \
+libsdl2-dev \
+libavcodec-dev \
+libavformat-dev \
+libswresample-dev \
+libavutil-dev \
 yt-dlp
 
 #Make the binary
